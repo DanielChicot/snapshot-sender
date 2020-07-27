@@ -1,7 +1,6 @@
 package app.services
 
 interface SuccessService {
-
-    fun postSuccessIndicator()
-
+    fun postCollectionSuccessIndicator()
+    fun postFullRunSuccessIndicator()
 }

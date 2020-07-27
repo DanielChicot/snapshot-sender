@@ -16,7 +16,10 @@ class JobCompletionNotificationListener(private val successService: SuccessServi
     override fun afterJob(jobExecution: JobExecution) {
         if (jobExecution.exitStatus.equals(ExitStatus.COMPLETED)) {
             if (exportStatusService.setSentStatus()) {
-                successService.postSuccessIndicator()
+                successService.postCollectionSuccessIndicator()
+            }
+            if (exportStatusService.collectionRunIsComplete()) {
+                successService.postFullRunSuccessIndicator()
             }
         }
         else {

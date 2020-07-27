@@ -62,8 +62,8 @@ class SuccessServiceImplTest {
         }
 
         given(httpClientProvider.client()).willReturn(httpClient)
-        successService.postSuccessIndicator()
-        verify(successService, times(1)).postSuccessIndicator()
+        successService.postCollectionSuccessIndicator()
+        verify(successService, times(1)).postCollectionSuccessIndicator()
         verify(httpClientProvider, times(1)).client()
         val captor = argumentCaptor<HttpPost>()
         Mockito.verify(httpClient, times(1)).execute(captor.capture())
@@ -119,8 +119,8 @@ class SuccessServiceImplTest {
         }
 
         given(httpClientProvider.client()).willReturn(failureClient).willReturn(failureClient).willReturn(successfulClient)
-        successService.postSuccessIndicator()
-        verify(successService, times(3)).postSuccessIndicator()
+        successService.postCollectionSuccessIndicator()
+        verify(successService, times(3)).postCollectionSuccessIndicator()
     }
 
     @Test
@@ -145,7 +145,7 @@ class SuccessServiceImplTest {
         }
 
         given(httpClientProvider.client()).willReturn(failureClient).willReturn(successfulClient)
-        successService.postSuccessIndicator()
-        verify(successService, times(2)).postSuccessIndicator()
+        successService.postCollectionSuccessIndicator()
+        verify(successService, times(2)).postCollectionSuccessIndicator()
     }
 }

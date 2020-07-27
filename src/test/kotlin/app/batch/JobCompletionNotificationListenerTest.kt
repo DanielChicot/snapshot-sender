@@ -34,27 +34,47 @@ class JobCompletionNotificationListenerTest {
     }
 
     @Test
-    fun willWriteSuccessIndicatorOnSuccessfulCompletionAndAllFilesSent() {
+    fun willWriteCollectionSuccessIndicatorOnSuccessfulCompletionAndAllFilesSent() {
         val jobExecution = mock<JobExecution> {
             on { exitStatus } doReturn ExitStatus.COMPLETED
         }
         given(exportStatusService.setSentStatus()).willReturn(true)
         jobCompletionNotificationListener.afterJob(jobExecution)
-        verify(successService, times(1)).postSuccessIndicator()
+        verify(successService, times(1)).postCollectionSuccessIndicator()
     }
 
     @Test
-    fun willNotWriteSuccessIndicatorOnSuccessfulCompletionAndNotAllFilesSent() {
+    fun willNotWriteCollectionSuccessIndicatorOnSuccessfulCompletionAndNotAllFilesSent() {
         val jobExecution = mock<JobExecution> {
             on { exitStatus } doReturn ExitStatus.COMPLETED
         }
         given(exportStatusService.setSentStatus()).willReturn(false)
         jobCompletionNotificationListener.afterJob(jobExecution)
-        verifyZeroInteractions(successService)
+        verify(successService, times(0)).postCollectionSuccessIndicator()
     }
 
     @Test
-    fun willNotWriteSuccessIndicatorOnUnsuccessfulCompletion() {
+    fun willWriteFullRunSuccessIndicatorOnSuccessfulCompletionAndAllFilesSent() {
+        val jobExecution = mock<JobExecution> {
+            on { exitStatus } doReturn ExitStatus.COMPLETED
+        }
+        given(exportStatusService.collectionRunIsComplete()).willReturn(true)
+        jobCompletionNotificationListener.afterJob(jobExecution)
+        verify(successService, times(1)).postFullRunSuccessIndicator()
+    }
+
+    @Test
+    fun willNotWriteFullRunSuccessIndicatorOnSuccessfulCompletionAndNotAllCollectionsFinished() {
+        val jobExecution = mock<JobExecution> {
+            on { exitStatus } doReturn ExitStatus.COMPLETED
+        }
+        given(exportStatusService.collectionRunIsComplete()).willReturn(false)
+        jobCompletionNotificationListener.afterJob(jobExecution)
+        verify(successService, times(0)).postFullRunSuccessIndicator()
+    }
+
+    @Test
+    fun willNotWriteAnySuccessIndicatorOnUnsuccessfulCompletion() {
         val jobExecution = mock<JobExecution> {
             on { exitStatus } doReturn ExitStatus.FAILED
         }

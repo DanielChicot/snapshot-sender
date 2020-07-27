@@ -4,7 +4,9 @@ import app.services.ExportStatusService
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB
 import com.amazonaws.services.dynamodbv2.model.AttributeValue
 import com.amazonaws.services.dynamodbv2.model.GetItemRequest
+import com.amazonaws.services.dynamodbv2.model.QueryRequest
 import com.amazonaws.services.dynamodbv2.model.UpdateItemRequest
+import com.amazonaws.services.dynamodbv2.model.Select
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.retry.annotation.Backoff
 import org.springframework.retry.annotation.Retryable
@@ -38,6 +40,11 @@ class DynamoDBExportStatusService(private val dynamoDB: AmazonDynamoDB): ExportS
                 false
             }
 
+    @Retryable(value = [Exception::class],
+            maxAttempts = maxAttempts,
+            backoff = Backoff(delay = initialBackoffMillis, multiplier = backoffMultiplier))
+    override fun collectionRunIsComplete(): Boolean = !collectionsStillExportingOrSending()
+
     private fun collectionIsComplete(): Boolean {
         val (currentStatus, filesExported, filesSent) = currentStatusAndCounts()
         val isComplete = currentStatus == "Exported" && filesExported == filesSent && filesExported > 0
@@ -46,6 +53,52 @@ class DynamoDBExportStatusService(private val dynamoDB: AmazonDynamoDB): ExportS
                 "files_sent" to "$filesSent",
                 "is_complete" to "$isComplete")
         return isComplete
+    }
+
+    private fun collectionsStillExportingOrSending(): Boolean {
+        val exportingCount = currentExportingCount()
+
+        if (exportingCount < 0) {
+            logger.warn("Could not check current exporting collections count",
+                "exporting_count" to "$exportingCount")
+            return true
+        }
+        else if (exportingCount > 0) {
+            logger.info("Collections still exporting so full run has not finished",
+                "exporting_count" to "$exportingCount")
+            return true
+        }
+
+        logger.info("No collections currently still exporting",
+            "exporting_count" to "$exportingCount")
+        
+        val exportedCount = currentExportedCount()
+
+        if (exportedCount < 0) {
+            logger.warn("Could not check count of exported collections of one or more snapshot files",
+                "exported_count" to "$exportedCount")
+            return true
+        }
+        else if (exportedCount > 0) {
+            logger.info("Collections containing one or more snapshot files are currently still sending so full run has not finished",
+                "exported_count" to "$exportedCount")
+            return true
+        }
+
+        logger.info("No collections containing one or more snapshot files are currently still sending",
+            "exporting_count" to "$exportedCount")
+
+        return false
+    }
+
+    private fun currentExportingCount(): Int {
+        val result = dynamoDB.query(getCountQueryRequestExporting())
+        return result.count ?: -1
+    }
+
+    private fun currentExportedCount(): Int {
+        val result = dynamoDB.query(getCountQueryRequestExported())
+        return result.count ?: -1
     }
 
     private fun currentStatusAndCounts(): Triple<String, Int, Int> {
@@ -83,12 +136,41 @@ class DynamoDBExportStatusService(private val dynamoDB: AmazonDynamoDB): ExportS
             consistentRead = true
         }
 
+    private fun getCountQueryRequestExporting() = 
+        QueryRequest().apply {
+            tableName = statusTableName
+            keyConditionExpression = "CorrelationId = :CorrelationId AND CollectionStatus = :CollectionStatus"
+            expressionAttributeValues = expressionValuesExporting
+            select = Select.COUNT.toString()
+        }
+
+    private fun getCountQueryRequestExported() = 
+        QueryRequest().apply {
+            tableName = statusTableName
+            keyConditionExpression = "CorrelationId = :CorrelationId AND CollectionStatus = :CollectionStatus AND FilesExported > :FilesExported"
+            expressionAttributeValues = expressionValuesExported
+            select = Select.COUNT.toString()
+        }
+
+    private val expressionValuesExporting by lazy {
+        mapOf("CorrelationId" to stringAttribute(correlationId),
+                "CollectionStatus" to stringAttribute("Exporting"))
+    }
+
+    private val expressionValuesExported by lazy {
+        mapOf("CorrelationId" to stringAttribute(correlationId),
+                "CollectionStatus" to stringAttribute("Exported"),
+                "FilesExported" to numberAttribute("0"))
+    }
+
     private val primaryKey by lazy {
         mapOf("CorrelationId" to stringAttribute(correlationId),
                 "CollectionName" to stringAttribute(topicName))
     }
 
     private fun stringAttribute(value: String) = AttributeValue().apply { s = value }
+
+    private fun numberAttribute(value: String) = AttributeValue().apply { n = value }
 
     @Value("\${dynamodb.status.table.name:UCExportToCrownStatus}")
     private lateinit var statusTableName: String
